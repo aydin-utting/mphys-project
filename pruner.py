@@ -103,8 +103,10 @@ class Pruner():
                 # max_unc = np.array([self.get_pct(self.get_batch_sigma(model,train_loader)) for i in range(50)]).mean()
                 # print(max_unc)
                
-                self.forward_add_ignore_average(model,50)
+                # self.forward_add_ignore_average(model,50)
                
+                self.forward_add_ignore_variance(model,50)
+                
                 # max_unc = self.get_pct(self.get_batch_sigma(model,train_loader))
                 # for b, (x,y) in enumerate(self.dataloader):
                     #self.forward_add_ignore(model,x,mu-self.sigmadict[self.step_number]*sigma)
@@ -154,7 +156,7 @@ class Pruner():
                     for i in range(x.size()[0]):
                         alea_unc[i,n] = std[i,c[i]]
     
-        max_unc = np.array([self.get_pct(alea_unc[:,k]) for k in range(50)]).mean()
+        max_unc = np.array([self.get_pct(alea_unc[:,k]) for k in range(num_samples)]).mean()
         
         # avg_alea_unc = alea_unc.mean(dim=1)
         
@@ -162,17 +164,35 @@ class Pruner():
             for j in range(alea_unc.size()[0]):
                 num_over_max = (alea_unc[j] < max_unc).sum()
                 # if avg_alea_unc[j] < max_unc and (j not in self.ignore_list):
-                if num_over_max > num_samples/2 and (j not in self.ignore_list):
+                if num_over_max > num_samples * 0.5 and (j not in self.ignore_list):
                     self.ignore_list.append(j)
         else:
             for j in range(alea_unc.size()[0]):
                 num_over_max = (alea_unc[j] > max_unc).sum()
                 # if avg_alea_unc[j] > max_unc and (j not in self.ignore_list):
-                if num_over_max > num_samples/2 and (j not in self.ignore_list):
+                if num_over_max > num_samples * 0.5 and (j not in self.ignore_list):
                     self.ignore_list.append(j)
         return True
                              
-    
+    def forward_add_ignore_variance(self,model,num_samples):
+        alea_unc = torch.empty((len(self.dataset),num_samples))
+        for n in range(num_samples):        
+            with torch.no_grad():
+                model.eval()
+                for b,(x,y) in enumerate(self.dataloader):
+                    v,s = model.forward(x)
+                    c = v.argmax(dim=1)
+                    std = torch.sqrt(F.softplus(s))
+                    for i in range(x.size()[0]):
+                        alea_unc[i,n] = std[i,c[i]]
+        alea_std = alea_unc.std(dim=1)
+        for j in range(alea_std.size()[0]):
+            if alea_std[j]>self.params['prune_sigmas'][0] and (j not in self.ignore_list):
+                self.ignore_list.append(j)
+        return True
+                
+                
+                        
     
     def create_dataloaders(self):
         indx = list(range(len(self.dataset)))
@@ -187,6 +207,23 @@ class Pruner():
         
         
         return train_loader, ignore_loader
+    
+    
+    def sorted_dataloader(self,model,batch_size,num_samples):
+        alea_unc = torch.empty((len(self.dataset),num_samples))
+        for n in range(num_samples):        
+            with torch.no_grad():
+                model.eval()
+                for b,(x,y) in enumerate(self.dataloader):
+                    v,s = model.forward(x)
+                    c = v.argmax(dim=1)
+                    std = torch.sqrt(F.softplus(s))
+                    for i in range(x.size()[0]):
+                        alea_unc[i,n] = std[i,c[i]]
+        val, indx = alea_unc.mean(dim=1).sort(descending=True)
+        sorted_subset = torch.utils.data.Subset(self.dataset,indx)
+        train_loader = torch.utils.data.DataLoader(sorted_subset, batch_size, shuffle=False)
+        return train_loader
      
         
         

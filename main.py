@@ -22,6 +22,7 @@ from parameter_search import param_search
 import itertools
 import random
 
+from pruner import Pruner
 
 def output_images_with_class(folder,loader,model):
     
@@ -168,18 +169,22 @@ def random_prune(pruned_loader, unpruned_data, batch_size):
     
     
 
-params = {'epochs': [250],
-          'batch_size' : [32],
-          'lr' : [1e-3],
-          'decay' : [1e-2],
-          'gamma' : [0.8],
-          'step_size' : [5],
-          'num_bins' : [50],
-          'prune_milestones' : [[100]],
-          'prune_sigmas' : [[0.5]],
-          'prune_gamma' : [50],
-          'ignore_below': [True,False]
-          }
+# params = {'epochs': [100],
+#           'batch_size' : [32],
+#           'lr' : [1e-2],
+#           'decay' : [1e-2,1e-4],
+#           'gamma' : [0.98,0.998],
+#           'step_size' : [5],
+#           'num_bins' : [50],
+#           'prune_milestones' : [[10000]],
+#           'prune_sigmas' : [[1000]],
+#           'prune_gamma' : [50],
+#           'ignore_below': [True],
+#            'p_i' : [5e-1],
+#            'p_f' : [0.99],
+#            'T' : [50,100,150,200]
+#           }
+
 
 
 # prune_param_dict = {'epochs': 3,
@@ -202,32 +207,66 @@ param_dict = {'epochs': 200,
           'batch_size' : 32,
           'lr' : 1e-3,
           'decay' : 1e-2,
-          'gamma' : 0.8,
+          'gamma' : 0.98,
           'step_size' : 5,
           'num_bins' : 50,
-          'prune_milestones' : [100],
-          'prune_sigmas' : [0.5],
+          'prune_milestones' : [10000],
+          'prune_sigmas' : [0],
+          'prune_gamma' : 50,
+          'ignore_below' : False,
+          'p_i' : 5e-1,
+          'p_f' : 0.99,
+          'T' : 100
+          }
+
+param_dict2 = {'epochs': 100,
+          'batch_size' : 32,
+          'lr' : 1e-3,
+          'decay' : 1e-2,
+          'gamma' : 1,
+          'step_size' : 5,
+          'num_bins' : 50,
+          'prune_milestones' : [1000],
+          'prune_sigmas' : [1],
           'prune_gamma' : 10,
-          'ignore_below' : True
+          'ignore_below' : True,
+          'p_i' : 5e-1,
+          'p_f' : 0.99,
+          'T' : 100
           }
 
 
 model= LeNet_KG(in_chan=1, out_chan=num_classes, imsize=imsize, kernel_size=5)
 
-# model,df = train(model,train_data,val_data,param_dict)
-
-results = param_search(model,params,train_data,val_data,test_data)
-
-min_params = ast.literal_eval(min(results.keys(),key = lambda k: results[k]['num_errors']))
+model,df = train(model,train_data,val_data,param_dict)
 
 
-fig = plt.figure()
-ax = fig.add_subplot()
-for k in results:
-    ax.plot(results[k]['df']['valloss'])
-    ax.plot(results[k]['df']['trainloss'])
-    break
-fig.show()
+
+
+
+# optimizer = torch.optim.Adam(model.parameters(), lr=param_dict['lr'], weight_decay=param_dict['decay'])
+# prun = Pruner(train_data, optimizer,params=param_dict)
+
+# tr = prun.sorted_dataloader(model,16,50)
+
+# sort_model= LeNet_KG(in_chan=1, out_chan=num_classes, imsize=imsize, kernel_size=5)
+
+
+# sort_model,epoch_df,train_df,val_df = standard_train(sort_model,tr,val_data,param_dict2)
+
+
+# results = param_search(model,params,train_data,val_data,test_data)
+
+# min_params = ast.literal_eval(min(results.keys(),key = lambda k: results[k]['num_errors']))
+
+
+# fig = plt.figure()
+# ax = fig.add_subplot()
+# for k in results:
+#     ax.plot(results[k]['df']['valloss'])
+#     ax.plot(results[k]['df']['trainloss'])
+#     break
+# fig.show()
 
 # model= LeNet_KG(in_chan=1, out_chan=num_classes, imsize=imsize, kernel_size=5)
 
@@ -237,7 +276,7 @@ fig.show()
 
 
 
-train_loader = torch.utils.data.DataLoader(train_data, batch_size=param_dict['batch_size'], shuffle=True)
+# train_loader = torch.utils.data.DataLoader(train_data, batch_size=param_dict['batch_size'], shuffle=True)
 # model_without_prune = LeNet_KG(in_chan=1, out_chan=num_classes, imsize=imsize, kernel_size=5)
 # model_without_prune, df_without_prune = standard_train(model_without_prune,train_loader,val_data,param_dict)
 # df_without_prune.to_csv('No pruning control.csv')

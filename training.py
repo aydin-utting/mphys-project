@@ -20,10 +20,30 @@ from pruner import Pruner
 import pandas as pd
 
 
+# -----------------------------------------------------------
+
+def get_lr(epoch, lr0, gamma):
+    return lr0*gamma**epoch 
+# -----------------------------------------------------------
+    
+def get_momentum(epoch, p_i, p_f, T):
+    if epoch<T:
+        p = (epoch/T)*p_f + (1 - (epoch/T))*p_i
+    else:
+        p = p_f
+    
+    return p
+
+
+
+
 
 def train(model, train_data, val_data, params):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['decay'])
+    
+    # optimizer = torch.optim.SGD(model.parameters(), lr=params['lr'], momentum=params['p_i'], dampening=params['p_i'])
+    
     scheduler = lr_scheduler.StepLR(optimizer, step_size=params['step_size'], gamma=params['gamma'])
     
     pruner = Pruner(train_data,optimizer ,params)
@@ -42,8 +62,6 @@ def train(model, train_data, val_data, params):
     # fig.show()
     # fig.canvas.draw()
     
-    epoch_trainaccs, epoch_valaccs = [], []
-    epoch_trainloss, epoch_valloss = [], []
     for epoch in range(params['epochs']):  # loop over the dataset multiple times
         t1 = time.perf_counter()
         model.train()
@@ -62,6 +80,11 @@ def train(model, train_data, val_data, params):
             
             loss.backward()
             optimizer.step()
+            
+            # optimizer.param_groups[0]['lr'] = get_lr(epoch, params['lr'], params['gamma'])
+            # optimizer.param_groups[0]['momentum'] = get_momentum(epoch, params['p_i'], params['p_f'], params['T'])
+            # optimizer.param_groups[0]['dampening'] = get_momentum(epoch, params['p_i'], params['p_f'], params['T'])
+            
             
             acc = (pred.argmax(dim=-1) == y_train).to(torch.float32).mean()
             train_accs.append(acc.mean().item())
@@ -104,23 +127,14 @@ def train(model, train_data, val_data, params):
         # fig.canvas.draw()
         
         
-        
-        
-        epoch_trainaccs.append(np.mean(train_accs))
-        epoch_valaccs.append(np.mean(val_accs))
-        epoch_trainloss.append(np.mean(train_losses))
-        epoch_valloss.append(np.mean(val_losses))
-        _results = [time.perf_counter()-t1,epoch, np.mean(train_losses), np.mean(val_losses), np.mean(val_accs)]
-        # with open(output_file, 'a', newline="") as f_out:
-        #     writer = csv.writer(f_out, delimiter=',')
-        #     writer.writerow(_results)
+    
     fig1 = plt.figure()
     ax1 = fig1.add_subplot()
     ax1.plot(df['valloss'])
     ax1.plot(df['trainloss'])
     ax1.grid()
     ax1.set_xlabel('Epoch')
-    fig.show()
+    fig1.show()
     return model, df
 
 
@@ -235,9 +249,18 @@ def standard_train(model,train_loader,val_data,params):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['lr'])
     
+    # optimizer = torch.optim.SGD(model.parameters(), lr=params['lr'], momentum=params['p_i'], dampening=params['p_i'])
+    
     scheduler = lr_scheduler.StepLR(optimizer, step_size=params['step_size'], gamma=params['gamma'])
     
     df = pd.DataFrame(index=list(range(params['epochs'])),columns = ["trainacc","trainloss","valacc","valloss"])
+    
+    
+    train_batch_num = [b for b,d in enumerate(train_loader)][-1]+1
+    val_batch_num = [b for b,d in enumerate(val_loader)][-1]+1
+    
+    train_df = pd.DataFrame(columns = ["trainacc","trainloss"])
+    val_df = pd.DataFrame(columns = ['valacc',"valloss"])
     
     for epoch in range(params['epochs']):  # loop over the dataset multiple times
     
@@ -251,12 +274,23 @@ def standard_train(model,train_loader,val_data,params):
             # add line in here to call sample_sigma()
             loss = F.cross_entropy(pred, y_train)
             loss.backward()
+            
+            # optimizer.param_groups[0]['lr'] = get_lr(epoch, params['lr'], params['gamma'])
+            # optimizer.param_groups[0]['momentum'] = get_momentum(epoch, params['p_i'], params['p_f'], params['T'])
+            # optimizer.param_groups[0]['dampening'] = get_momentum(epoch, params['p_i'], params['p_f'], params['T'])
+            
+            
             optimizer.step()
-    
+            
             acc = (pred.argmax(dim=-1) == y_train).to(torch.float32).mean()
             train_accs.append(acc.mean().item())
             train_losses.append(loss.item())
-    
+            
+            train_df.loc[epoch*train_batch_num+batch,'trainloss'] = loss.item()
+            train_df.loc[epoch*train_batch_num+batch,'trainacc'] = acc.mean().item()
+            
+            
+            
     
         with torch.no_grad():
             model.eval()
@@ -267,6 +301,8 @@ def standard_train(model,train_loader,val_data,params):
                 acc = (val_pred.argmax(dim=-1) == y_val).to(torch.float32).mean()
                 val_losses.append(loss.item())
                 val_accs.append(acc.mean().item())
+                val_df.loc[epoch*val_batch_num+i,'valloss'] = loss.item()
+                val_df.loc[epoch*val_batch_num+i,'valacc'] = acc.mean().item()
     
         print('Epoch: {}, Loss: {}, Accuracy: {}'.format(epoch, np.mean(val_losses), np.mean(val_accs)))
         df.loc[epoch, 'trainacc'] = np.mean(train_accs)
@@ -278,4 +314,4 @@ def standard_train(model,train_loader,val_data,params):
         
     print("Final val error: ",100.*(1 - acc))
 
-    return model, df
+    return model, df, train_df, val_df

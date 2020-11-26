@@ -93,3 +93,89 @@ class LeNet_KG(nn.Module):
 
     
 # -----------------------------------------------------------------------------
+
+class CNN(nn.Module):
+    """CNN."""
+
+    def __init__(self):
+        """CNN Builder."""
+        super(CNN, self).__init__()
+
+        self.conv_layer = nn.Sequential(
+
+            # Conv Layer block 1
+            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            # Conv Layer block 2
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout2d(p=0.05),
+
+            # Conv Layer block 3
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        
+
+        self.fc_layer = nn.Sequential(
+            nn.Dropout(p=0.1),
+            nn.Linear(4096, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.1),
+            nn.Linear(512, 84)
+        )
+        
+        self.fc3   = nn.Linear(84, 10)
+        self.fc4   = nn.Linear(84, 10)
+        
+        self.n_samp = 100
+        self.dist   = Normal
+
+
+    def forward(self, x):
+        """Perform forward."""
+        
+        # conv layers
+        x = self.conv_layer(x)
+        
+        # flatten
+        x = x.view(x.size(0), -1)
+        
+        # fc layer
+        x = self.fc_layer(x)
+        
+        v = self.fc3(x)
+        s = self.fc4(x)
+
+        return v,s
+    
+    def sample_sigma(self,v,s,y):
+    
+            # calc sigma:
+            sig2 = F.softplus(s)
+    
+            # calc_d:
+            d = torch.empty((v.size()[0],v.size()[1],self.n_samp))#, device=device)
+            yd = torch.empty((v.size()[0],self.n_samp), dtype=torch.long)#, device=device)
+            for t in range(self.n_samp):
+                eps = self.dist(torch.tensor([0.0]), torch.tensor([1.0])).sample(sample_shape=v.size())#.to(device=device)
+                x = v + torch.sqrt(sig2)*torch.squeeze(eps)
+                d[:,:,t] = x
+                yd[:,t] = y
+    
+            return d, yd
