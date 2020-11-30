@@ -181,8 +181,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         pred, std = model(x_train)
         # add line in here to call sample_sigma()
-        model.sample_sigma(pred,std,y_train)
-        loss = F.cross_entropy(pred, y_train) + loss_l2()
+        d, yd = model.sample_sigma(pred,std,y_train)
+        loss = F.cross_entropy(pred, y_train) + loss_l2(d,yd)
         loss.backward()
         optimizer.step()
 
@@ -196,7 +196,9 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         test_losses, test_accs = [], []; acc = 0
         for i, (x_test, y_test) in enumerate(test_loader):
             test_pred, test_std = model(x_test)
-            loss = F.cross_entropy(test_pred, y_test)
+            test_d, test_yd = model.sample_sigma(pred,std,y_train)
+        
+            loss = F.cross_entropy(test_pred, y_test)  + loss_l2(test_d,test_yd)
             acc = (test_pred.argmax(dim=-1) == y_test).to(torch.float32).mean()
             test_losses.append(loss.item())
             test_accs.append(acc.mean().item())
