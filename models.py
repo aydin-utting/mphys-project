@@ -145,6 +145,7 @@ class CNN(nn.Module):
         
         self.n_samp = 100
         self.dist   = Normal
+        self.device = torch.device('cuda')
 
 
     def forward(self, x):
@@ -170,10 +171,10 @@ class CNN(nn.Module):
             sig2 = F.softplus(s)
     
             # calc_d:
-            d = torch.empty((v.size()[0],v.size()[1],self.n_samp))#, device=device)
-            yd = torch.empty((v.size()[0],self.n_samp), dtype=torch.long)#, device=device)
+            d = torch.empty((v.size()[0],v.size()[1],self.n_samp), device=self.device)
+            yd = torch.empty((v.size()[0],self.n_samp), dtype=torch.long, device=self.device)
             for t in range(self.n_samp):
-                eps = self.dist(torch.tensor([0.0]), torch.tensor([1.0])).sample(sample_shape=v.size())#.to(device=device)
+                eps = self.dist(torch.tensor([0.0]), torch.tensor([1.0])).sample(sample_shape=v.size()).to(device=self.device)
                 x = v + torch.sqrt(sig2)*torch.squeeze(eps)
                 d[:,:,t] = x
                 yd[:,t] = y

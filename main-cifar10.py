@@ -22,6 +22,22 @@ import itertools
 import random
 
 from pruner import Pruner
+from loss_functions import loss_l2
+
+# -----------------------------------------------------------
+
+def get_lr(epoch, lr0, gamma):
+    return lr0*gamma**epoch 
+# -----------------------------------------------------------
+    
+def get_momentum(epoch, p_i, p_f, T):
+    if epoch<T:
+        p = (epoch/T)*p_f + (1 - (epoch/T))*p_i
+    else:
+        p = p_f
+    
+    return p
+
 
 
 transform = transforms.Compose(
@@ -106,8 +122,107 @@ param_dict = {'epochs': 200,
           'T' : 100
           }
 
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+epochs        = 100   # number of training epochs
+valid_size    = 50    # number of samples for validation
+batch_size    = 50    # number of samples per mini-batch
+imsize        = 50    # image size
+num_classes   = 2     # The number of output classes. FRI/FRII
+learning_rate = 1e-3  # The speed of convergence
+momentum      = 9e-1  # momentum for optimizer
+decay         = 1e-6  # weight decay for regularisation
+random_seed   = 42
+p_i = 5e-1
+p_f = 0.99
+T = 100
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
 # model= LeNet_KG(in_chan=3, out_chan=10, imsize=32, kernel_size=5)
 model = CNN()
-model, df =  train(model,slim_train_data,slim_val_data,param_dict)
+# model, df =  train(model,slim_train_data,slim_val_data,param_dict)
+
+# optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay)
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=p_i, dampening=p_i)
+# -----------------------------------------------------------------------------
+
+# summary(model, (1, imsize, imsize))
+
+# -----------------------------------------------------------------------------
+
+
+
+use_cuda = True
+
+if use_cuda:
+    model = model.cuda()
+    model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    cudnn.benchmark = True
+
+
+
+epoch_trainaccs, epoch_testaccs = [], []
+epoch_trainloss, epoch_testloss = [], []
+for epoch in range(epochs):  # loop over the dataset multiple times
+
+    model.train()
+    train_losses, train_accs = [], []; acc = 0
+    for batch, (x_train, y_train) in enumerate(trainloader):
+        
+        if use_cuda:
+            x_train = x_train.cuda()
+            y_train = y_train.cuda()
+        
+        model.zero_grad()
+
+        pred, std = model(x_train)
+        # add line in here to call sample_sigma()
+        model.sample_sigma(pred,std,y_train)
+        loss = F.cross_entropy(pred, y_train) + loss_l2()
+        loss.backward()
+        optimizer.step()
+
+        acc = (pred.argmax(dim=-1) == y_train).to(torch.float32).mean()
+        train_accs.append(acc.mean().item())
+        train_losses.append(loss.item())
+
+
+    with torch.no_grad():
+        model.eval()
+        test_losses, test_accs = [], []; acc = 0
+        for i, (x_test, y_test) in enumerate(test_loader):
+            test_pred, test_std = model(x_test)
+            loss = F.cross_entropy(test_pred, y_test)
+            acc = (test_pred.argmax(dim=-1) == y_test).to(torch.float32).mean()
+            test_losses.append(loss.item())
+            test_accs.append(acc.mean().item())
+
+    print('Epoch: {}, Loss: {}, Accuracy: {}'.format(epoch, np.mean(test_losses), np.mean(test_accs)))
+    epoch_trainaccs.append(np.mean(train_accs))
+    epoch_testaccs.append(np.mean(test_accs))
+    epoch_trainloss.append(np.mean(train_losses))
+    epoch_testloss.append(np.mean(test_losses))
+    
+    
+    optimizer.param_groups[0]['lr'] = get_lr(epoch, learning_rate,gamma)
+    optimizer.param_groups[0]['momentum'] = get_momentum(epoch,p_i,p_f, T)
+    optimizer.param_groups[0]['dampening'] = get_momentum(epoch, p_i, p_f,T)
+
+print("Final test error: ",100.*(1 - epoch_testaccs[-1]))
+
+# save trained model:
+outfile = "./mb_lenet_kg.pt"
+torch.save(model.state_dict(), outfile)
+
+
+
+
+
+
+
 
 
