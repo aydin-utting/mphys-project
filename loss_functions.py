@@ -23,19 +23,8 @@ def loss_l2(d, yd):
             S = S + log_softmax_d[n,yd[n,0]].sum()
         
         return -(1/N)*(1/T)*S
+    
 
-#l2 loss function from Kochkina and Liakata paper
-def loss_l2_cuda(d, yd):
-        device=torch.device('cuda')
-        N = yd.size()[0]
-        T = yd.size()[1]
-        log_softmax_d = F.log_softmax(d,dim=1)
-
-        S = torch.tensor([0.0],dtype=torch.float, requires_grad=True,device=device)
-
-        for n in range(N):
-            S = S + log_softmax_d[n,yd[n,0]].sum()
-
-        return -(1/N)*(1/T)*S
-
-
+def weighted_cross_entropy(v,s,y):
+    var = F.softplus(s)
+    return F.cross_entropy(v/var ,y)
